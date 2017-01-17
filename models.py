@@ -14,7 +14,7 @@ class Magazine(peewee.Model):
 
 class Item(peewee.Model):
     """
-    title - PCGames2006First
+    title - PCGamesV1
     title2 - PCGames2006Second+
     """
     title = peewee.CharField()
@@ -39,7 +39,7 @@ class Image(peewee.Model):
 
 class File(peewee.Model):
     item = peewee.ForeignKeyField(Item)
-    title = peewee.CharField()
+    title = peewee.CharField(null=True)
     file = peewee.CharField()
 
     class Meta:

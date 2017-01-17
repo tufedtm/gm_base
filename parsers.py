@@ -1,3 +1,6 @@
+import os
+from configparser import ConfigParser
+
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 
@@ -6,7 +9,7 @@ from models import Magazine, Item, Image, File
 
 class PCGamesV1:
     """
-    для pc игры 2004.01.01 - pc игры 200
+    для pc игры 2004.01.01
     """
 
     def __init__(self, folder):
@@ -21,53 +24,108 @@ class PCGamesV1:
     def get_sections(self):
         sections = open(f'{self.folder}/sections.txt').readlines()
         sections = [x.strip() for x in sections if x.strip() not in ['13', 'verdana'] and '$' not in x.strip()]
-        sections = list(zip(sections[::2], sections[1::2]))
 
-        return sections
+        return self._list_to_pair(sections)
 
-    def _get_items(self, magazine, parent=None):
-
-        for item in self.get_sections():
-            orm_item = Item(parent=parent)
-
-            orm_item.title = item[0]
-            orm_item.path = item[1]
-            orm_item.magazine = magazine
-
-        # for soup_item in soup:
-        #     if isinstance(soup_item, Tag) and soup_item.name == 'item':
-        #         orm_item = Item(parent=parent)
-        #
-        #         orm_item.title = self._get_item_title(soup_item)
-        #         orm_item.path = self._get_item_path(soup_item)
-        #         orm_item.head = self._get_item_head(soup_item)
-        #         orm_item.text = self._get_item_text(soup_item)
-        #         orm_item.magazine = magazine
-        #         orm_item.save()
-        #
-        #         if not soup_item.item:
-        #
-        #             images = self._get_item_images(soup_item)
-        #             if images:
-        #                 for image in images:
-        #                     Image.create(item=orm_item, image=image)
-        #
-        #             files = self._get_item_files(soup_item)
-        #             if files:
-        #                 for title, file in files:
-        #                     File.create(item=orm_item, title=title, file=file)
-        #
-        #         else:
-        #             self._get_items(soup_item, magazine, orm_item)
+    @staticmethod
+    def _list_to_pair(items):
+        return list(zip(items[::2], items[1::2]))
 
     def save_items(self):
         orm_magazine = Magazine.create(title=self.get_title(), info=self.get_info())
+        self._save_items(orm_magazine)
+        print(self.get_title())
 
-        self._get_items(orm_magazine)
+    def _save_items(self, magazine, parent=None):
+
+        for section in self.get_sections():
+            orm_item = Item(parent=parent)
+            orm_item.title = section[0]
+            orm_item.path = section[1]
+            orm_item.magazine = magazine
+            orm_item.save()
+
+            items = open(f'{self.folder}/{orm_item.path}/items.txt').readlines()[2:]
+            items = [x.strip() for x in items]
+
+            for item in self._list_to_pair(items):
+                path = f'{self.folder}/{orm_item.path}/{item[1]}'
+
+                orm_sub_item = Item(parent=orm_item)
+                orm_sub_item.title = item[0]
+                orm_sub_item.path = item[1]
+                orm_sub_item.text = open(f'{path}/info.txt').read()
+                orm_sub_item.magazine = magazine
+                orm_sub_item.save()
+
+                files = os.listdir(f'{path}')
+                files.remove('info.txt')
+
+                for file in files:
+                    filetype = file.split('.')[-1]
+
+                    if filetype in ['bmp', 'gif', 'jpg', 'jpeg', 'png']:
+                        Image.create(item=orm_sub_item, image=file)
+                    elif filetype not in ['txt']:
+                        File.create(item=orm_sub_item, file=file)
 
 
-asd = PCGamesV1('E:\pc игры\pc игры 2004\pc игры 2004.01.01.1')
-print(asd.save_items())
+class PCGamesV2(PCGamesV1):
+    """
+    для pc игры 2004.03.03 - pc игры 2004.09.09 (мб pc игры 2004.10.10)
+    """
+
+    def get_title(self):
+
+        config = ConfigParser()
+        config.read_file(open(f'{self.folder}/config.ini'))
+
+        return config['Settings']['cd_title'].strip()
+
+    def get_soup(self):
+        xml_file = open(f'{self.folder}/content.xml').read()
+        soup = BeautifulSoup(xml_file, 'xml')
+
+        return soup.find('CONTENT').children
+
+    def get_sections(self):
+        pass
+
+    def save_items(self):
+        orm_magazine = Magazine.create(title=self.get_title(), info=self.get_info())
+        self._save_items(self.get_soup(), orm_magazine)
+        print(self.get_title())
+
+    def _save_items(self, soup, magazine, path='', parent=None):
+        for soup_item in soup:
+            if parent:
+                full_path = f'{path}/{soup_item["path"]}'
+            else:
+                full_path = f'{self.folder}/{soup_item["path"]}'
+
+            orm_item = Item(parent=parent)
+            orm_item.title = soup_item['name']
+            orm_item.path = soup_item['path']
+            if os.path.exists(f'{full_path}/info.txt'):
+                orm_item.text = open(f'{full_path}/info.txt').read().strip()
+            orm_item.magazine = magazine
+            orm_item.save()
+
+            if os.path.exists(f'{full_path}/files.ini'):
+                config = ConfigParser()
+                config.read_file(open(f'{full_path}/files.ini'))
+
+                for file in config['Files'].values():
+                    File.create(item=orm_item, title=config[file]['Title'], file=config[file]['File'])
+
+            for file in os.listdir(f'{full_path}'):
+                filetype = file.split('.')[-1]
+
+                if filetype in ['bmp', 'gif', 'jpg', 'jpeg', 'png']:
+                    Image.create(item=orm_item, image=file)
+
+            if list(soup_item.children):
+                self._save_items(soup_item.children, magazine, full_path, orm_item)
 
 
 class PCGames2006First:
