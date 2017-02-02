@@ -176,9 +176,10 @@ class PCGamesV3(PCGamesV2):
 
     @staticmethod
     def _get_item_images_via_files(path):
-        images = os.listdir(f'{path}/big')
-
-        return images
+        if os.path.exists(f'{path}/screenshots'):
+            return os.listdir(f'{path}/screenshots/big')
+        else:
+            return []
 
     @staticmethod
     def _get_item_files(item):
@@ -193,7 +194,7 @@ class PCGamesV3(PCGamesV2):
             if isinstance(soup_item, Tag) and soup_item.name == 'item':
                 orm_item = Item(parent=parent)
 
-                if not soup_item["path"]:
+                if not soup_item['path']:
                     # на случай если path - пустая строка
                     full_path = f'{path}'
                 elif parent:
@@ -202,7 +203,7 @@ class PCGamesV3(PCGamesV2):
                     full_path = f'{self.folder}/content/{soup_item["path"]}'
 
                 orm_item.title = self._get_item_title(soup_item)
-                orm_item.path = self._get_item_path(soup_item)
+                orm_item.path = self._get_item_path(soup_item) or None
                 orm_item.text = self._get_item_text(soup_item)
                 orm_item.magazine = magazine
                 orm_item.save()
@@ -215,10 +216,9 @@ class PCGamesV3(PCGamesV2):
                         for title, file in files:
                             File.create(item=orm_item, title=title, file=file)
 
-                    if os.path.exists(f'{full_path}/screenshots'):
-                        images = self._get_item_images_via_files(f'{full_path}/screenshots')
-                        for image in images:
-                            Image.create(item=orm_item, image=image)
+                    images = self._get_item_images_via_files(f'{full_path}')
+                    for image in images:
+                        Image.create(item=orm_item, image=image)
 
     def _get_all_tags_name(self):
         return {tag.name for tag in self.get_soup().find_all()}

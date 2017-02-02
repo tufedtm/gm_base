@@ -19,7 +19,7 @@ class Item(peewee.Model):
     """
     title = peewee.CharField()
     title2 = peewee.CharField(null=True)
-    path = peewee.CharField()
+    path = peewee.CharField(null=True)
     head = peewee.TextField(null=True)
     text = peewee.TextField(null=True)
     parent = peewee.ForeignKeyField('self', null=True)
