@@ -72,7 +72,7 @@ class PCGamesV1:
 
 class PCGamesV2(PCGamesV1):
     """
-    для pc игры 2004.03.03 - pc игры 2004.09.09 (мб pc игры 2004.10.10)
+    pc игры 2004.03.03 - pc игры 2004.09.09 (мб pc игры 2004.10.10)
     """
 
     def get_title(self):
@@ -128,19 +128,20 @@ class PCGamesV2(PCGamesV1):
                 self._save_items(soup_item.children, magazine, full_path, orm_item)
 
 
-class PCGames2006First:
+class PCGamesV3(PCGamesV2):
     """
-    для pc игры 2006.25.01 - pc игры 2006.28.04
+    pc игры 2004.11.11 (мб pc игры 2004.10.10)
     """
 
     def __init__(self, folder):
+        super(PCGamesV3, self).__init__(folder)
         self.folder = folder
+        self.xml_file = f'{self.folder}/config.xml'
 
     def get_soup(self):
-        xml_file = open(f'{self.folder}/autorun/data/config.xml').read()
-        soup = BeautifulSoup(xml_file, 'xml')
+        xml_file = open(self.xml_file).read()
 
-        return soup
+        return BeautifulSoup(xml_file, 'xml')
 
     def get_title(self):
         return self.get_soup().disk['title'].strip()
@@ -153,7 +154,7 @@ class PCGames2006First:
 
     def save_items(self):
         orm_magazine = Magazine.create(title=self.get_title(), title_full=self.get_title_full(), info=self.get_info())
-        self._get_items(self.get_soup().disk.children, orm_magazine)
+        self._save_items(self.get_soup().disk.children, orm_magazine)
         print(self.get_title())
 
     @staticmethod
@@ -165,15 +166,6 @@ class PCGames2006First:
         return item['path'].strip()
 
     @staticmethod
-    def _get_item_head(item):
-        soup = item.find('head', recursive=False)
-
-        if soup:
-            head = ''.join(str(item).strip() for item in soup.contents)
-
-            return head if head else None
-
-    @staticmethod
     def _get_item_text(item):
         soup = item.find('text', recursive=False)
 
@@ -183,11 +175,10 @@ class PCGames2006First:
             return text if text else None
 
     @staticmethod
-    def _get_item_images(item):
-        soup = item.find('images', recursive=False)
+    def _get_item_images_via_files(path):
+        images = os.listdir(f'{path}/big')
 
-        if soup:
-            return [image['name'].strip() for image in soup.find_all('image')]
+        return images
 
     @staticmethod
     def _get_item_files(item):
@@ -195,6 +186,74 @@ class PCGames2006First:
 
         if soup:
             return [(file['title'].strip(), file['name'].strip()) for file in soup.find_all('file')]
+
+    def _save_items(self, soup, magazine, path='', parent=None):
+
+        for soup_item in soup:
+            if isinstance(soup_item, Tag) and soup_item.name == 'item':
+                orm_item = Item(parent=parent)
+
+                if not soup_item["path"]:
+                    # на случай если path - пустая строка
+                    full_path = f'{path}'
+                elif parent:
+                    full_path = f'{path}/{soup_item["path"]}'
+                else:
+                    full_path = f'{self.folder}/content/{soup_item["path"]}'
+
+                orm_item.title = self._get_item_title(soup_item)
+                orm_item.path = self._get_item_path(soup_item)
+                orm_item.text = self._get_item_text(soup_item)
+                orm_item.magazine = magazine
+                orm_item.save()
+
+                if soup_item.item:
+                    self._save_items(soup_item, magazine, full_path, orm_item)
+                else:
+                    files = self._get_item_files(soup_item)
+                    if files:
+                        for title, file in files:
+                            File.create(item=orm_item, title=title, file=file)
+
+                    if os.path.exists(f'{full_path}/screenshots'):
+                        images = self._get_item_images_via_files(f'{full_path}/screenshots')
+                        for image in images:
+                            Image.create(item=orm_item, image=image)
+
+    def _get_all_tags_name(self):
+        return {tag.name for tag in self.get_soup().find_all()}
+
+
+class PCGamesV4(PCGamesV3):
+    """
+    pc игры 2004.12.12
+    """
+
+    def __init__(self, folder):
+        super(PCGamesV4, self).__init__(folder)
+        self.xml_file = f'{self.folder}/res/config.xml'
+
+
+class PCGames2006First:
+    """
+    для pc игры 2006.25.01 - pc игры 2006.28.04
+    """
+
+    @staticmethod
+    def _get_item_head(item):
+        soup = item.find('head', recursive=False)
+
+        if soup:
+            head = ''.join(str(item).strip() for item in soup.contents)
+
+            return head if head else None
+
+    @staticmethod
+    def _get_item_images(item):
+        soup = item.find('images', recursive=False)
+
+        if soup:
+            return [image['name'].strip() for image in soup.find_all('image')]
 
     def _get_items(self, soup, magazine, parent=None):
 
